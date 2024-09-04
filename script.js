@@ -562,12 +562,15 @@ function displayQuestLog() {
             countdownHtml += `<p><strong>Daily Timer:</strong> ${dailyTimeLeft}</p>`;
         }
 
-        questItem.innerHTML = `
-            <h3>${quest.title}</h3>
-            <p><strong>Reward:</strong> ${quest.reward || 'None'}</p>
-            <p><strong>Punishment:</strong> ${quest.punishment || 'None'}</p>
-            ${countdownHtml}
-        `;
+questItem.innerHTML = `
+    <h3>${quest.title}</h3>
+    <p><strong>Reward:</strong> ${quest.reward || 'None'}</p>
+    <p><strong>Punishment:</strong> ${quest.punishment || 'None'}</p>
+    ${quest.activationTime ? `<p><strong>Streak:</strong> ${quest.streakCount || 0}</p>` : ''}
+    ${countdownHtml}
+`;
+
+
         questItem.onclick = () => showQuestInfo(quest);
 
         if (quest.status === 'in-progress') {
@@ -587,6 +590,8 @@ function displayQuestLog() {
 
     updateCountdowns();
 }
+
+
 
 function updateCountdowns() {
     const questItems = document.querySelectorAll('.quest-item');
@@ -672,14 +677,43 @@ function moveQuestToActive() {
 function markQuestAsCompleted() {
     const questIndex = document.getElementById('quest-info').dataset.questIndex;
     const quest = quests[questIndex];
-    
+    const currentDateTime = new Date(); // Current date and time
+
+    // Initialize streak and lastCompletedTime if not present
+    if (!quest.streakCount) {
+        quest.streakCount = 0;
+    }
+    if (!quest.lastCompletedTime) {
+        quest.lastCompletedTime = null;
+    }
+
+    // Check if the quest has an activationTime (daily timer)
+    if (quest.activationTime) {
+        const [activationHours, activationMinutes] = quest.activationTime.split(':').map(Number);
+        const lastCompletionDate = new Date(quest.lastCompletedTime || 0);
+        const dailyResetTime = new Date();
+        dailyResetTime.setHours(activationHours, activationMinutes, 0, 0);
+
+        // If last completed time was before the daily reset and we're completing after, increment streak
+        if (currentDateTime > dailyResetTime && lastCompletionDate < dailyResetTime) {
+            quest.streakCount += 1;
+        } else if (!quest.lastCompletedTime) {
+            // If it's the first time completing this quest
+            quest.streakCount = 1;
+        }
+    }
+
+    // Update quest status and lastCompletedTime
     quest.status = 'completed';
-    quest.lastCompleted = Date.now(); // Record the exact time
+    quest.lastCompleted = Date.now(); // Store the exact completion timestamp
+    quest.lastCompletedTime = currentDateTime.toISOString(); // Save current timestamp for tracking
 
     saveQuestsToLocalStorage();  // Save to localStorage
     updateQuestLogs();
     closeQuestInfo();
 }
+
+
 
 function markQuestAsFailed() {
     const questIndex = document.getElementById('quest-info').dataset.questIndex;
@@ -716,15 +750,18 @@ function submitQuest() {
 
     if (title && description) {
         const newQuest = {
-            title: title,
-            description: description,
-            reward: reward,
-            classTag: classTag,
-            punishment: punishment,
-            experience: 1000,
-            status: 'in-progress',
-            lastCompleted: null,
-        };
+    title: title,
+    description: description,
+    reward: reward,
+    classTag: classTag,
+    punishment: punishment,
+    experience: 1000,
+    status: 'in-progress',
+    lastCompleted: null,
+    streakCount: 0,  // New field to track streaks
+    lastCompletedDate: null,  // New field to store the date of the last completion
+};
+
 
         if (activationTime) {
             newQuest.activationTime = activationTime;
@@ -820,42 +857,39 @@ function goBackToMenu() {
 
 
 
+
+
 // Function to update quest logs and apply status changes based on timers
 function resetRecurringQuests() {
     const currentTime = new Date();
+    const today = currentTime.toDateString(); // Get today's date
 
     quests.forEach(quest => {
-        // Handle one-off quests
+        // One-off quest handling (unchanged)
         if (quest.oneOffEndTime) {
             const endTime = new Date(quest.oneOffEndTime);
-            if (currentTime > endTime) {
-                if (quest.status === 'completed') {
-                    // Keep it in the completed list
-                    quest.status = 'completed'; 
-                } else {
-                    // Mark as failed if not completed
-                    quest.status = 'failed';
-                }
+            if (currentTime > endTime && quest.status !== 'completed') {
+                quest.status = 'failed';
             }
         }
 
-        // Handle daily reactivation
+        // Handle daily recurring quests
         if (quest.activationTime) {
             const [activationHours, activationMinutes] = quest.activationTime.split(':').map(Number);
-            const now = new Date();
-            const activationToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), activationHours, activationMinutes);
+            const activationToday = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate(), activationHours, activationMinutes);
 
-            // Check if the current time matches today's activation time
-            if (now.getHours() === activationHours && now.getMinutes() === activationMinutes) {
-                // Check if it is time to reset (i.e., last reset was not today)
-                if (!quest.lastResetTime || new Date(quest.lastResetTime).toDateString() !== now.toDateString()) {
-                    // Reactivate the quest if it was completed or failed
-                    if (quest.status === 'completed' || quest.status === 'failed') {
-                        quest.status = 'in-progress';
-                        quest.lastCompleted = null; // Reset the lastCompleted timestamp
-                        quest.lastResetTime = now.toISOString(); // Update last reset time
-                    }
+            // Check if we passed the activation time and if the quest hasn't been completed today
+            if (quest.lastResetDate !== today && currentTime >= activationToday) {
+                // If the quest hasn't been completed by the reset time, reset streak to 0
+                if (quest.status !== 'completed') {
+                    quest.streakCount = 0;
                 }
+
+                // Set quest back to in-progress for the new day
+                quest.status = 'in-progress';
+
+                // Reset the quest only once per day
+                quest.lastResetDate = today;
             }
         }
     });
@@ -892,6 +926,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     resetRecurringQuests();
 });
+
+
+
+
+
+
+
+
 
 
 
@@ -1217,3 +1259,92 @@ function goBacktoJobPage() {
         showJobPage('job-log');
     }
 }
+
+
+
+
+
+
+
+
+
+// Set the number of fairy lights to create
+const numFairyLights = 25;
+const container = document.querySelector('.fairy-lights-container');
+
+// Array to hold fairy lights
+const fairyLights = [];
+
+// Create fairy lights
+for (let i = 0; i < numFairyLights; i++) {
+  let fairyLight = document.createElement('div');
+  fairyLight.classList.add('fairy-light');
+
+  let randomSize = 5 + Math.random() * 20;  // Random size between 5px and 25px
+  let randomGlow = 20 + Math.random() * 30;  // Random glow between 20px and 50px
+  fairyLight.style.width = `${randomSize}px`;
+  fairyLight.style.height = `${randomSize}px`;
+  fairyLight.style.boxShadow = `
+    0 0 ${randomGlow}px rgba(0, 191, 255, 0.8), 
+    0 0 ${randomGlow * 2}px rgba(0, 191, 255, 0.6), 
+    0 0 ${randomGlow * 3}px rgba(0, 191, 255, 0.4),
+    0 0 ${randomGlow * 4}px rgba(0, 191, 255, 0.2)`;
+  
+  let randomX = Math.random() * window.innerWidth;
+  let randomY = Math.random() * window.innerHeight;
+  fairyLight.style.left = `${randomX}px`;
+  fairyLight.style.top = `${randomY}px`;
+
+  let randomDuration = 8 + Math.random() * 10; // Duration between 8s and 18s
+  let randomDelay = Math.random() * 5;  // Delay between 0s and 5s
+  fairyLight.style.animationDuration = `${randomDuration}s`;
+  fairyLight.style.animationDelay = `${randomDelay}s`;
+
+  let randomDirectionX = (Math.random() - 0.5) * 200 + "vw"; // Random movement in X axis
+  let randomDirectionY = (Math.random() - 0.5) * 200 + "vh"; // Random movement in Y axis
+  fairyLight.style.setProperty('--randomX', randomDirectionX);
+  fairyLight.style.setProperty('--randomY', randomDirectionY);
+
+  let randomOpacity = 0.4 + Math.random() * 0.6;
+  fairyLight.style.setProperty('--randomOpacity', randomOpacity);
+
+  // Append fairy light to the container
+  container.appendChild(fairyLight);
+
+  // Add the fairy light to the array
+  fairyLights.push(fairyLight);
+}
+
+// Mouse movement tracking
+document.addEventListener('mousemove', (event) => {
+  const mouseX = event.clientX;
+  const mouseY = event.clientY;
+
+  fairyLights.forEach(light => {
+    const rect = light.getBoundingClientRect();
+    const lightX = rect.left + rect.width / 2;
+    const lightY = rect.top + rect.height / 2;
+
+    // Calculate distance between the mouse and the fairy light
+    const dx = lightX - mouseX;
+    const dy = lightY - mouseY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Define avoidance range and strength
+    const avoidanceRange = 100; // Distance at which lights start avoiding the mouse
+    const avoidanceStrength = 0.05; // Lower strength for subtle movement
+    const maxMovement = 5; // Maximum movement per frame in pixels
+
+    if (distance < avoidanceRange) {
+      // Calculate the direction to move the light away from the mouse
+      const moveX = (dx / distance) * Math.min(avoidanceStrength * (avoidanceRange - distance), maxMovement);
+      const moveY = (dy / distance) * Math.min(avoidanceStrength * (avoidanceRange - distance), maxMovement);
+
+      // Smooth movement by updating position gradually
+      const currentLeft = parseFloat(light.style.left) || 0;
+      const currentTop = parseFloat(light.style.top) || 0;
+      light.style.left = `${currentLeft + moveX}px`;
+      light.style.top = `${currentTop + moveY}px`;
+    }
+  });
+});
