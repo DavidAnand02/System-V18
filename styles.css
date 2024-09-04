@@ -578,3 +578,55 @@ input[type="text"] {
 
 
 
+
+/* styles.css */
+.fairy-lights-container {
+    position: fixed; /* Make sure it stays fixed in the background */
+    top: 0;
+    left: 0;
+    width: 100vw; /* Cover the entire viewport width */
+    height: 100vh; /* Cover the entire viewport height */
+    z-index: -1; /* Ensure it is behind other content */
+    pointer-events: none; /* Make sure it does not block interactions with other elements */
+    background: url('path/to/your/fairy-lights-image.jpg') no-repeat center center; /* Replace with your fairy lights image */
+    background-size: cover; /* Adjust the image size to cover the container */
+}
+
+
+/* Common fairy light styles */
+.fairy-light {
+  position: absolute;
+  background: #00bfff; /* Blue color */
+  border-radius: 50%;
+  opacity: 0; /* Start as invisible */
+  animation: wander 15s infinite ease-in-out, fade 15s infinite ease-in-out; /* Combine wander and fade animations */
+  pointer-events: none; /* Prevent interaction */
+  transition: opacity 2s ease-in-out;
+  animation-direction: alternate; /* Make the animation go back and forth */
+}
+
+/* Keyframes for random wandering animation */
+@keyframes wander {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(var(--randomX), var(--randomY));
+  }
+}
+
+/* Keyframes for fading in and out */
+@keyframes fade {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: var(--randomOpacity); /* Use random opacity */
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+
+
